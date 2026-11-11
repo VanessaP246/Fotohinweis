@@ -1,0 +1,39 @@
+# ============================================================================
+#  Einstellungen für das Foto-Rätsel – nur diese Datei muss angepasst werden.
+#  Nach dem Speichern einfach `raetsel.py` (erneut) starten.
+# ============================================================================
+
+[hinweis]
+# Die versteckte Botschaft. Lange Texte werden automatisch umbrochen.
+text = "Blockiert WCs"
+
+# Position der TEXTMITTE in Prozent des Bildes:
+#   x: 0 = linker Rand, 50 = Mitte, 100 = rechter Rand
+#   y: 0 = oberer Rand, 50 = Mitte, 100 = unterer Rand
+x = 50
+y = 42
+
+# Maximale Größe des Textblocks in Prozent der Bildbreite bzw. -höhe.
+# Die Schrift wird so groß wie möglich gewählt, ohne diesen Kasten zu verlassen.
+# Größer = Text leichter zu finden.
+breite = 90
+hoehe = 80
+
+# Drehung in Grad gegen den Uhrzeigersinn (0 = waagerecht).
+drehung = 0
+
+# Pfad zu einer fetten TTF-Schrift. Leer = Arial Black.
+schrift = ""
+
+[druck]
+# Papierformat: "A4", "A5" oder "10x15cm"
+papier = "A4"
+
+[raster]
+# Rasterweite in Linien pro Zoll. Kleiner = gröbere Punkte, Textur leichter erkennbar.
+lpi = 40
+
+# Welche Varianten erzeugt werden.
+#   standard: Raster im Text um 25° gedreht (subtil)
+#   winkel45: Raster im Text um 45° gedreht (deutlicher)
+varianten = ["standard", "winkel45"]
