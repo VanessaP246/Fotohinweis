@@ -69,6 +69,7 @@ class Context:
     highlight: bool = False
     highlight_text: str | None = None
     text_layout: dict | None = None  # Position/Größe der Text-Maske, siehe render_text_mask()
+    photo_aspect: float | None = None  # gesetzt = Bildbereich an Foto-Seitenverhältnis (B/H) anpassen statt zuschneiden
     _cache: dict = field(default_factory=dict)
 
     @property
@@ -76,16 +77,28 @@ class Context:
         return PAPER_MM[self.paper]
 
     @property
-    def image_mm(self):
-        """Größe des Bildbereichs auf dem Papier (mm)."""
+    def _max_image_mm(self):
         pw, ph = self.paper_mm
         m = MARGIN_MM[self.paper]
         return pw - 2 * m, ph - 2 * m
 
     @property
+    def image_mm(self):
+        """Größe des Bildbereichs auf dem Papier (mm)."""
+        w, h = self._max_image_mm
+        if self.photo_aspect:
+            if w / h > self.photo_aspect:
+                w = h * self.photo_aspect
+            else:
+                h = w / self.photo_aspect
+        return w, h
+
+    @property
     def image_origin_mm(self):
-        """Linke untere Ecke des Bildbereichs (PDF-Koordinaten, mm)."""
-        return MARGIN_MM[self.paper], MARGIN_MM[self.paper]
+        """Linke untere Ecke des Bildbereichs (PDF-Koordinaten, mm). Kleinerer Bildbereich wird zentriert."""
+        (mw, mh), (w, h) = self._max_image_mm, self.image_mm
+        m = MARGIN_MM[self.paper]
+        return m + (mw - w) / 2, m + (mh - h) / 2
 
     def size_px(self, dpi: int):
         w, h = self.image_mm

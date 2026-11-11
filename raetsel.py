@@ -6,7 +6,7 @@
 
 Text, Position und Größe des Hinweises stehen in einstellungen.toml.
 
-Pro Bild entstehen in output/:
+Pro Bild entstehen in output/ (vorherige Ergebnisse werden dabei gelöscht):
     <bild>_standard.png / .pdf    Raster im Text 25° gedreht
     <bild>_winkel45.png / .pdf    Raster im Text 45° gedreht
     <bild>_kontrolle.png          Foto mit rot markierter Textposition (nur zur Kontrolle, nicht drucken)
@@ -19,7 +19,7 @@ import tomllib
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 from common import PAPER_MM, Context, default_font, save_pdf_raster, save_png, to_u8
 from variants import halftone as H
@@ -59,10 +59,17 @@ def control_image(ctx: Context) -> Image.Image:
 
 def process(src: Path, cfg: dict):
     h = cfg["hinweis"]
+    aspect = None
+    if not cfg["druck"].get("zuschneiden", True):
+        with Image.open(src) as im:
+            w, hh = ImageOps.exif_transpose(im).size
+        aspect = w / hh
     ctx = Context(src=src, name=src.stem, text=h["text"], out_root=OUTPUT, dpi=H.DPI,
                   paper=cfg["druck"]["papier"], font=h.get("schrift") or default_font(),
-                  text_layout={k: h[k] for k in ("x", "y", "breite", "hoehe", "drehung")})
+                  text_layout={k: h[k] for k in ("x", "y", "breite", "hoehe", "drehung")},
+                  photo_aspect=aspect)
     OUTPUT.mkdir(exist_ok=True)
+    clear_output()
     control_image(ctx).save(OUTPUT / f"{ctx.name}_kontrolle.png")
     for name in cfg["raster"]["varianten"]:
         img, black, out_black, mask = H.render(ctx, LPI=cfg["raster"]["lpi"], **H.PRESETS[name])
@@ -73,8 +80,18 @@ def process(src: Path, cfg: dict):
         print(f"  → {base.name}.png / .pdf")
 
 
+def clear_output():
+    """output/ enthält immer nur die Dateien des aktuellen Fotos → alte Ergebnisse vorher löschen."""
+    for p in OUTPUT.iterdir():
+        if p.is_file() and not p.name.startswith("."):
+            p.unlink()
+
+
 def is_done(src: Path, cfg: dict) -> bool:
-    return all((OUTPUT / f"{src.stem}_{v}.pdf").exists() for v in cfg["raster"]["varianten"])
+    """Fertig, wenn alle PDFs existieren und neuer sind als das Foto (gleicher Name wird überschrieben)."""
+    t = src.stat().st_mtime
+    pdfs = [OUTPUT / f"{src.stem}_{v}.pdf" for v in cfg["raster"]["varianten"]]
+    return all(p.exists() and p.stat().st_mtime >= t for p in pdfs)
 
 
 def pending(cfg: dict, force: bool) -> list[Path]:
@@ -95,14 +112,18 @@ def run_once(cfg: dict, force: bool):
 
 def watch():
     print(f"Beobachte {INPUT}/ – neue Bilder werden automatisch verarbeitet (Strg+C zum Beenden).")
-    sizes: dict[Path, int] = {}
-    failed: set[Path] = set()
+    sizes: dict[Path, tuple[int, float]] = {}
+    failed: set[tuple[Path, float]] = set()  # (Datei, Änderungszeit) → ein neues Foto gleichen Namens wird wieder versucht
     while True:
         cfg = load_config()  # Änderungen an einstellungen.toml gelten sofort für das nächste Bild
         for src in pending(cfg, force=False):
-            if src in failed:
+            try:
+                st = src.stat()
+            except FileNotFoundError:  # inzwischen durch ein neues Foto ersetzt
                 continue
-            size = src.stat().st_size
+            if (src, st.st_mtime) in failed:
+                continue
+            size = (st.st_size, st.st_mtime)
             if sizes.get(src) != size:  # erst verarbeiten, wenn die Datei fertig geschrieben ist
                 sizes[src] = size
                 continue
@@ -111,7 +132,7 @@ def watch():
                 process(src, cfg)
             except Exception as e:  # ein defektes Bild soll den Dauerbetrieb nicht beenden
                 print(f"  FEHLER bei {src.name}: {e}")
-                failed.add(src)
+                failed.add((src, st.st_mtime))
                 (OUTPUT / f"{src.stem}_FEHLER.txt").write_text(str(e), encoding="utf-8")
         time.sleep(POLL_S)
 
