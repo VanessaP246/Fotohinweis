@@ -112,6 +112,8 @@ def run_once(cfg: dict, force: bool):
 
 
 def watch():
+    INPUT.mkdir(exist_ok=True)  # auch beim Start über kamera.py (ruft watch() direkt auf, nicht main())
+    OUTPUT.mkdir(exist_ok=True)
     print(f"Beobachte {INPUT}/ – neue Bilder werden automatisch verarbeitet (Strg+C zum Beenden).")
     sizes: dict[Path, tuple[int, float]] = {}
     failed: set[tuple[Path, float]] = set()  # (Datei, Änderungszeit) → ein neues Foto gleichen Namens wird wieder versucht
