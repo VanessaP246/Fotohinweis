@@ -29,8 +29,7 @@ MASK_FILL_W = 0.90        # Text-Maske: max. Anteil der Bildbreite
 MASK_FILL_H = 0.80        # Text-Maske: max. Anteil der Bildhöhe
 MASK_LINE_SPACING = 0.05  # zusätzlicher Zeilenabstand (Anteil der Schriftgröße)
 
-CAPTION_FONT = "Courier-Bold"  # Beschriftung unter dem Foto (Überwachungskamera-Look)
-CAPTION_PT = 14               # Schriftgröße in Punkt
+CAPTION_PIXEL_MM = 0.5        # Beschriftung unter dem Foto (Pixelschrift 5×7): Größe eines Pixels
 CAPTION_GAP_MM = 3.0          # Abstand zwischen Foto-Unterkante und Beschriftung
 
 PRINTSIM_DPI = 150        # simulierte effektive Druckauflösung
@@ -305,19 +304,93 @@ def save_pdf_raster(ctx: Context, path: Path, img: np.ndarray | Image.Image, lab
     c.save()
 
 
+# Pixelschrift 5×7 wie bei Kamera-Einblendungen (1 = Pixel gesetzt). Kleinbuchstaben → Großbuchstaben,
+# unbekannte Zeichen → Leerzeichen.
+PIXEL_FONT = {
+    " ": "00000 00000 00000 00000 00000 00000 00000",
+    "0": "01110 10001 10011 10101 11001 10001 01110",
+    "1": "00100 01100 00100 00100 00100 00100 01110",
+    "2": "01110 10001 00001 00010 00100 01000 11111",
+    "3": "11111 00010 00100 00010 00001 10001 01110",
+    "4": "00010 00110 01010 10010 11111 00010 00010",
+    "5": "11111 10000 11110 00001 00001 10001 01110",
+    "6": "00110 01000 10000 11110 10001 10001 01110",
+    "7": "11111 00001 00010 00100 01000 01000 01000",
+    "8": "01110 10001 10001 01110 10001 10001 01110",
+    "9": "01110 10001 10001 01111 00001 00010 01100",
+    "A": "01110 10001 10001 10001 11111 10001 10001",
+    "B": "11110 10001 10001 11110 10001 10001 11110",
+    "C": "01110 10001 10000 10000 10000 10001 01110",
+    "D": "11100 10010 10001 10001 10001 10010 11100",
+    "E": "11111 10000 10000 11110 10000 10000 11111",
+    "F": "11111 10000 10000 11110 10000 10000 10000",
+    "G": "01110 10001 10000 10111 10001 10001 01111",
+    "H": "10001 10001 10001 11111 10001 10001 10001",
+    "I": "01110 00100 00100 00100 00100 00100 01110",
+    "J": "00111 00010 00010 00010 00010 10010 01100",
+    "K": "10001 10010 10100 11000 10100 10010 10001",
+    "L": "10000 10000 10000 10000 10000 10000 11111",
+    "M": "10001 11011 10101 10101 10001 10001 10001",
+    "N": "10001 10001 11001 10101 10011 10001 10001",
+    "O": "01110 10001 10001 10001 10001 10001 01110",
+    "P": "11110 10001 10001 11110 10000 10000 10000",
+    "Q": "01110 10001 10001 10001 10101 10010 01101",
+    "R": "11110 10001 10001 11110 10100 10010 10001",
+    "S": "01111 10000 10000 01110 00001 00001 11110",
+    "T": "11111 00100 00100 00100 00100 00100 00100",
+    "U": "10001 10001 10001 10001 10001 10001 01110",
+    "V": "10001 10001 10001 10001 10001 01010 00100",
+    "W": "10001 10001 10001 10101 10101 10101 01010",
+    "X": "10001 10001 01010 00100 01010 10001 10001",
+    "Y": "10001 10001 10001 01010 00100 00100 00100",
+    "Z": "11111 00001 00010 00100 01000 10000 11111",
+    ".": "00000 00000 00000 00000 00000 01100 01100",
+    ":": "00000 01100 01100 00000 01100 01100 00000",
+    "-": "00000 00000 00000 11111 00000 00000 00000",
+    "/": "00000 00001 00010 00100 01000 10000 00000",
+}
+PIXEL_ADVANCE = 6      # Zeichenbreite inkl. Abstand (Pixel)
+PIXEL_LINE = 10        # Zeilenhöhe inkl. Abstand (Pixel)
+
+
+def pixel_text_width(text: str, px: float) -> float:
+    return (len(text) * PIXEL_ADVANCE - 1) * px if text else 0.0
+
+
+def draw_pixel_text(c, text: str, x: float, top: float, px: float):
+    """Text in Pixelschrift zeichnen. x = linke Kante, top = Oberkante (PDF-Punkte), px = Pixelgröße (Punkte)."""
+    path = c.beginPath()
+    for i, ch in enumerate(text.upper()):
+        rows = PIXEL_FONT.get(ch, PIXEL_FONT[" "]).split()
+        x0 = x + i * PIXEL_ADVANCE * px
+        for r, row in enumerate(rows):
+            y = top - (r + 1) * px
+            col = 0
+            while col < 5:  # zusammenhängende Pixel einer Zeile als ein Rechteck
+                if row[col] == "1":
+                    end = col
+                    while end < 5 and row[end] == "1":
+                        end += 1
+                    path.rect(x0 + col * px, y, (end - col) * px, px)
+                    col = end
+                else:
+                    col += 1
+    c.drawPath(path, stroke=0, fill=1)
+
+
 def draw_caption(ctx: Context, c):
     """Überwachungskamera-Beschriftung unter dem Foto: links der Kameraname, rechts Datum und Uhrzeit."""
     ox, oy = ctx.image_origin_mm
     iw, _ = ctx.image_mm
-    lead = CAPTION_PT * 1.15                               # Zeilenabstand (pt)
-    y = oy * mm - CAPTION_GAP_MM * mm - CAPTION_PT * 0.75  # Grundlinie der ersten Zeile
-    c.setFont(CAPTION_FONT, CAPTION_PT)
+    px = CAPTION_PIXEL_MM * mm
+    top = (oy - CAPTION_GAP_MM) * mm
+    right = (ox + iw) * mm
     c.setFillGray(0)
     if ctx.caption:
-        c.drawString(ox * mm, y, ctx.caption)
+        draw_pixel_text(c, ctx.caption, ox * mm, top, px)
     if ctx.taken:
-        c.drawRightString((ox + iw) * mm, y, ctx.taken.strftime("%d.%m.%Y"))
-        c.drawRightString((ox + iw) * mm, y - lead, ctx.taken.strftime("%H:%M:%S"))
+        for i, line in enumerate((ctx.taken.strftime("%d/%m/%Y"), ctx.taken.strftime("%H:%M:%S"))):
+            draw_pixel_text(c, line, right - pixel_text_width(line, px), top - i * PIXEL_LINE * px, px)
 
 
 def capture_time(path: Path) -> datetime:
