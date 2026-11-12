@@ -5,7 +5,7 @@
 
 [hinweis]
 # Die versteckte Botschaft. Lange Texte werden automatisch umbrochen.
-text = "Blockiert WCs"
+text = "Blockiert WC-Eingänge"
 
 # Position der TEXTMITTE in Prozent des Bildes:
 #   x: 0 = linker Rand, 50 = Mitte, 100 = rechter Rand

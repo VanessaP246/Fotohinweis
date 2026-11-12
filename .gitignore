@@ -3,3 +3,5 @@ __pycache__/
 esp32cam/.pio/
 esp32cam/sicherung/
 *.part
+input/
+output/
