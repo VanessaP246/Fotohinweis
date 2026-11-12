@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from common import PAPER_MM, Context, default_font, save_pdf_raster, save_png, to_u8
+from common import PAPER_MM, Context, capture_time, default_font, save_pdf_raster, save_png, to_u8
 from variants import halftone as H
 
 ROOT = Path(__file__).parent
@@ -67,7 +67,8 @@ def process(src: Path, cfg: dict):
     ctx = Context(src=src, name=src.stem, text=h["text"], out_root=OUTPUT, dpi=H.DPI,
                   paper=cfg["druck"]["papier"], font=h.get("schrift") or default_font(),
                   text_layout={k: h[k] for k in ("x", "y", "breite", "hoehe", "drehung")},
-                  photo_aspect=aspect)
+                  photo_aspect=aspect, caption=cfg["druck"].get("kamera_name", ""),
+                  taken=capture_time(src))
     OUTPUT.mkdir(exist_ok=True)
     clear_output()
     control_image(ctx).save(OUTPUT / f"{ctx.name}_kontrolle.png")

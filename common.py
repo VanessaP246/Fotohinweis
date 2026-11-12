@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import zlib
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -18,7 +19,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 # Parameter
 # ---------------------------------------------------------------------------
 PAPER_MM = {"A4": (210.0, 297.0), "A5": (148.0, 210.0), "10x15cm": (100.0, 150.0)}
-MARGIN_MM = {"A4": 12.0, "A5": 10.0, "10x15cm": 6.0}   # Rand um das Bild (Platz für Passmarken/Hinweis)
+MARGIN_MM = {"A4": 12.0, "A5": 10.0, "10x15cm": 6.0}   # Rand um das Bild (nicht bedruckbarer Bereich des Druckers)
 
 CLAHE_CLIP = 2.0          # CLAHE-Kontrastbegrenzung (höher = mehr lokaler Kontrast)
 CLAHE_TILES = 8           # CLAHE-Kachelraster
@@ -27,6 +28,10 @@ FACE_Y_POS = 0.40         # Gesicht wird auf diese relative Höhe im Zuschnitt g
 MASK_FILL_W = 0.90        # Text-Maske: max. Anteil der Bildbreite
 MASK_FILL_H = 0.80        # Text-Maske: max. Anteil der Bildhöhe
 MASK_LINE_SPACING = 0.05  # zusätzlicher Zeilenabstand (Anteil der Schriftgröße)
+
+CAPTION_FONT = "Courier-Bold"  # Beschriftung unter dem Foto (Überwachungskamera-Look)
+CAPTION_PT = 14               # Schriftgröße in Punkt
+CAPTION_GAP_MM = 3.0          # Abstand zwischen Foto-Unterkante und Beschriftung
 
 PRINTSIM_DPI = 150        # simulierte effektive Druckauflösung
 PRINTSIM_BLUR_PX = 0.7    # Gauß-Sigma (bei PRINTSIM_DPI)
@@ -72,6 +77,8 @@ class Context:
     highlight_text: str | None = None
     text_layout: dict | None = None  # Position/Größe der Text-Maske, siehe render_text_mask()
     photo_aspect: float | None = None  # gesetzt = Bildbereich an Foto-Seitenverhältnis (B/H) anpassen statt zuschneiden
+    caption: str = ""  # links unter dem Foto, z. B. "CAMERA 1" (leer = nichts)
+    taken: datetime | None = None  # Aufnahmezeit, rechts unter dem Foto (Datum + Uhrzeit)
     _cache: dict = field(default_factory=dict)
 
     @property
@@ -266,58 +273,19 @@ def save_png(path: Path, img: np.ndarray | Image.Image, dpi: int | None = None, 
     img.save(path, dpi=(dpi, dpi) if dpi else None)
 
 
-def new_pdf(ctx: Context, path: Path, label: str, marks=True):
-    """Leere PDF-Seite in Papiergröße mit Hinweis, Kontrollmaß und Passmarken. Rückgabe: Canvas."""
+def new_pdf(ctx: Context, path: Path, label: str):
+    """Leere PDF-Seite in Papiergröße (ohne Markierungen oder Text um das Foto). Rückgabe: Canvas."""
     pw, ph = ctx.paper_mm
     c = rl_canvas.Canvas(str(path), pagesize=(pw * mm, ph * mm))
     c.setTitle(label)
-    # Druck-Hinweis + Kontrollmaß 50 mm
-    m = MARGIN_MM[ctx.paper]
-    c.setFont("Helvetica", 5.5)
-    c.setFillGray(0.35)
-    c.drawString(m * mm, (m * 0.35) * mm,
-                 f"{label}  |  Drucken mit 100 % / 'Tatsächliche Größe' (keine Anpassung)  |  Kontrollmaß: 50 mm →")
-    x0 = (pw - m - 50) * mm
-    y0 = (m * 0.42) * mm
-    c.setStrokeGray(0.35)
-    c.setLineWidth(0.3)
-    c.line(x0, y0, x0 + 50 * mm, y0)
-    for x in (x0, x0 + 50 * mm):
-        c.line(x, y0 - 1 * mm, x, y0 + 1 * mm)
-    if marks:
-        draw_registration_marks(ctx, c)
-    c.setFillGray(0)
-    c.setStrokeGray(0)
     return c
 
 
-def draw_registration_marks(ctx: Context, c):
-    """Passmarken (Kreuz + Kreis) an den vier Ecken des Bildbereichs, außerhalb des Bilds."""
-    ox, oy = ctx.image_origin_mm
-    iw, ih = ctx.image_mm
-    m = MARGIN_MM[ctx.paper]
-    r = min(3.0, m * 0.35)
-    off = m * 0.5
-    c.setStrokeGray(0)
-    c.setLineWidth(0.25)
-    for cx, cy in [(ox - off, oy - off), (ox + iw + off, oy - off),
-                   (ox - off, oy + ih + off), (ox + iw + off, oy + ih + off)]:
-        c.circle(cx * mm, cy * mm, r * 0.6 * mm, stroke=1, fill=0)
-        c.line((cx - r) * mm, cy * mm, (cx + r) * mm, cy * mm)
-        c.line(cx * mm, (cy - r) * mm, cx * mm, (cy + r) * mm)
-    # Rahmen-Ecken
-    c.setLineWidth(0.2)
-    L = min(5.0, iw * 0.05)
-    for x, y, sx, sy in [(ox, oy, 1, 1), (ox + iw, oy, -1, 1), (ox, oy + ih, 1, -1), (ox + iw, oy + ih, -1, -1)]:
-        c.line(x * mm, y * mm, (x + sx * L) * mm, y * mm)
-        c.line(x * mm, y * mm, x * mm, (y + sy * L) * mm)
-
-
-def save_pdf_raster(ctx: Context, path: Path, img: np.ndarray | Image.Image, label: str, marks=True):
+def save_pdf_raster(ctx: Context, path: Path, img: np.ndarray | Image.Image, label: str):
     """Rasterbild exakt in Bildbereichsgröße (100 %) auf die Seite setzen."""
     if isinstance(img, np.ndarray):
         img = Image.fromarray(img if img.dtype == np.uint8 else to_u8(img))
-    c = new_pdf(ctx, path, label, marks)
+    c = new_pdf(ctx, path, label)
     ox, oy = ctx.image_origin_mm
     iw, ih = ctx.image_mm
     if img.mode == "1":
@@ -332,8 +300,37 @@ def save_pdf_raster(ctx: Context, path: Path, img: np.ndarray | Image.Image, lab
         xobj.streamContent = zlib.compress(img.tobytes(), 9)  # PIL "1": 1 = weiß, Zeilen auf Bytes gepolstert = PDF
     else:
         c.drawImage(ImageReader(img.convert("L")), ox * mm, oy * mm, iw * mm, ih * mm)
+    draw_caption(ctx, c)
     c.showPage()
     c.save()
+
+
+def draw_caption(ctx: Context, c):
+    """Überwachungskamera-Beschriftung unter dem Foto: links der Kameraname, rechts Datum und Uhrzeit."""
+    ox, oy = ctx.image_origin_mm
+    iw, _ = ctx.image_mm
+    lead = CAPTION_PT * 1.15                               # Zeilenabstand (pt)
+    y = oy * mm - CAPTION_GAP_MM * mm - CAPTION_PT * 0.75  # Grundlinie der ersten Zeile
+    c.setFont(CAPTION_FONT, CAPTION_PT)
+    c.setFillGray(0)
+    if ctx.caption:
+        c.drawString(ox * mm, y, ctx.caption)
+    if ctx.taken:
+        c.drawRightString((ox + iw) * mm, y, ctx.taken.strftime("%d.%m.%Y"))
+        c.drawRightString((ox + iw) * mm, y - lead, ctx.taken.strftime("%H:%M:%S"))
+
+
+def capture_time(path: Path) -> datetime:
+    """Aufnahmezeit: EXIF-Aufnahmedatum, sonst Zeitpunkt, an dem die Datei gespeichert wurde."""
+    try:
+        with Image.open(path) as im:
+            exif = im.getexif()
+            raw = exif.get_ifd(0x8769).get(0x9003) or exif.get(0x0132)  # DateTimeOriginal / DateTime
+        if raw:
+            return datetime.strptime(str(raw).strip("\x00 "), "%Y:%m:%d %H:%M:%S")
+    except (OSError, ValueError):
+        pass
+    return datetime.fromtimestamp(path.stat().st_mtime)
 
 
 # ---------------------------------------------------------------------------

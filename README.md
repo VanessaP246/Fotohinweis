@@ -31,7 +31,7 @@ Kamera  →  input/<bild>.jpg  →  raetsel.py  →  output/<bild>_standard.pdf
 4. **Kontrollieren:** `output/<bild>_kontrolle.png` zeigt das Foto mit dem Text rot markiert, damit du
    die Position prüfen kannst. Dieses Bild **nicht** drucken, es verrät die Lösung.
 5. **Drucken:** `output/<bild>_standard.pdf` bzw. `_winkel45.pdf` mit **100 % / „Tatsächliche Größe"**
-   (nicht „An Seite anpassen"). Unten auf jeder Seite ist ein 50-mm-Kontrollmaß.
+   (nicht „An Seite anpassen").
 
 Bereits verarbeitete Bilder werden übersprungen. Ein Bild gilt als verarbeitet, sobald seine PDFs existieren.
 Im Beobachten-Modus gelten Änderungen an `einstellungen.toml` ab dem nächsten Bild.

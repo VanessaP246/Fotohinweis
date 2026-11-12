@@ -34,6 +34,10 @@ papier = "A4"
 # false = ganzes Foto verwenden; der Bildbereich wird kleiner und auf dem Blatt zentriert
 zuschneiden = false
 
+# Beschriftung wie bei einer Überwachungskamera: links unter dem Foto dieser Name,
+# rechts darunter Datum und Uhrzeit der Aufnahme. Leer ("") = kein Name.
+kamera_name = "CAMERA 1"
+
 [kamera]
 # USB-Anschluss der ESP32-CAM. "auto" nimmt den ersten USB-Seriell-Adapter (/dev/cu.usbserial…).
 port = "auto"
