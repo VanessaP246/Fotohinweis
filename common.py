@@ -96,6 +96,19 @@ class Context:
         return w, h
 
     @property
+    def text_ref_mm(self):
+        """Bezugsfläche für die Hinweisgröße: Bildbereich des Fotos im Hochformat.
+        Ein Querformat-Foto bekommt dadurch denselben Hinweis wie dasselbe Foto hochkant."""
+        w, h = self._max_image_mm
+        if self.photo_aspect:
+            a = min(self.photo_aspect, 1 / self.photo_aspect)  # Hochformat-Seitenverhältnis
+            if w / h > a:
+                w = h * a
+            else:
+                h = w / a
+        return min(w, h), max(w, h)
+
+    @property
     def image_origin_mm(self):
         """Linke untere Ecke des Bildbereichs (PDF-Koordinaten, mm). Kleinerer Bildbereich wird zentriert."""
         (mw, mh), (w, h) = self._max_image_mm, self.image_mm
@@ -123,7 +136,10 @@ class Context:
         text = text or self.text
         key = ("mask", dpi, text)
         if key not in self._cache:
-            self._cache[key] = render_text_mask(text, *self.size_px(dpi), self.font, **(self.text_layout or {}))
+            rw, rh = self.text_ref_mm
+            self._cache[key] = render_text_mask(text, *self.size_px(dpi), self.font,
+                                                ref=(mm_to_px(rw, dpi), mm_to_px(rh, dpi)),
+                                                **(self.text_layout or {}))
         return self._cache[key]
 
 
@@ -203,17 +219,20 @@ def _fit(draw, txt, font_path, max_w, max_h):
 
 def render_text_mask(text: str, w: int, h: int, font_path: str, x: float = 50, y: float = 50,
                      breite: float = MASK_FILL_W * 100, hoehe: float = MASK_FILL_H * 100,
-                     drehung: float = 0) -> np.ndarray:
+                     drehung: float = 0, ref: tuple[int, int] | None = None) -> np.ndarray:
     """Text so groß wie möglich in einen Kasten setzen (Zeilenumbruch automatisch).
 
     x, y: Mitte des Texts in % der Bildbreite/-höhe (0 = links/oben, 100 = rechts/unten).
     breite, hoehe: maximale Größe des Textblocks in % der Bildbreite/-höhe.
     drehung: Grad gegen den Uhrzeigersinn. Ragt der Text über den Rand, wird er nach innen geschoben.
+    ref: (Breite, Höhe) in px, auf die sich breite/hoehe beziehen (Standard: das Bild selbst). So bleibt die
+         Textgröße gleich, egal ob das Foto hoch oder quer ist. Passt der Text nicht ins Bild, wird er verkleinert.
     """
     words = text.split() or [" "]
     if len(words) > 10:  # zu viele Kombinationen – Wörter grob vorgruppieren
         words = [" ".join(words[i:i + 2]) for i in range(0, len(words), 2)]
-    box_w, box_h = int(w * breite / 100), int(h * hoehe / 100)
+    rw, rh = ref or (w, h)
+    box_w, box_h = min(int(rw * breite / 100), w), min(int(rh * hoehe / 100), h)
     probe = ImageDraw.Draw(Image.new("L", (1, 1)))
     size, txt = max((_fit(probe, t, font_path, box_w, box_h), t) for t in _line_splits(words))
     f = ImageFont.truetype(font_path, size)

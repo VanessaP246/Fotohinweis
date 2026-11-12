@@ -13,7 +13,8 @@ text = "Blockiert WC-Eingänge"
 x = 50
 y = 42
 
-# Maximale Größe des Textblocks in Prozent der Bildbreite bzw. -höhe.
+# Maximale Größe des Textblocks in Prozent der Bildbreite bzw. -höhe – gemessen am Foto im HOCHFORMAT,
+# damit der Hinweis bei Querformat-Fotos genauso groß bleibt.
 # Die Schrift wird so groß wie möglich gewählt, ohne diesen Kasten zu verlassen.
 # Größer = Text leichter zu finden.
 breite = 90
@@ -38,8 +39,8 @@ zuschneiden = false
 port = "auto"
 
 # Drehung des Kamerabilds in Grad IM Uhrzeigersinn: 0, 90, 180 oder 270.
-# Hochkant aufgehängte Kamera → 90 oder 270 (einmal ausprobieren, welches richtig herum ist).
-drehung = 90
+# 0 = Querformat (so nimmt die Kamera auf). Hochkant aufgehängte Kamera → 90 oder 270.
+drehung = 0
 
 # Blitz-LED der ESP32-CAM beim Foto einschalten.
 blitz = false
