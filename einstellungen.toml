@@ -48,7 +48,7 @@ blitz = false
 # Drucker für Taste P in kamera.py (druckt output/foto_standard.pdf in Originalgröße).
 # "auto" nimmt den ersten Drucker mit "DeskJet" im Namen, sonst den Standarddrucker.
 # Namen aller Drucker anzeigen: im Terminal `lpstat -e`
-name = "auto"
+name = "HP_Color_LaserJet_Pro_M252dw_2"
 
 [raster]
 # Rasterweite in Linien pro Zoll. Kleiner = gröbere Punkte, Textur leichter erkennbar.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfdoc import PDFImageXObject
 from reportlab.pdfgen import canvas as rl_canvas
 
 # ---------------------------------------------------------------------------
@@ -299,7 +301,18 @@ def save_pdf_raster(ctx: Context, path: Path, img: np.ndarray | Image.Image, lab
     c = new_pdf(ctx, path, label, marks)
     ox, oy = ctx.image_origin_mm
     iw, ih = ctx.image_mm
-    c.drawImage(ImageReader(img.convert("L")), ox * mm, oy * mm, iw * mm, ih * mm)
+    if img.mode == "1":
+        # Echtes 1-Bit-Bild einbetten (ReportLab würde es zu 8-Bit aufblasen: ~25 MB pro Seite bei 600 dpi,
+        # das überfordert den Drucker → "PDF beschädigt"). Nur Flate, kein ASCII85.
+        c.drawImage(ImageReader(Image.new("L", (1, 1))), ox * mm, oy * mm, iw * mm, ih * mm)
+        xobj = next(o for o in c._doc.idToObject.values() if isinstance(o, PDFImageXObject))
+        xobj.width, xobj.height = img.size
+        xobj.colorSpace = "DeviceGray"
+        xobj.bitsPerComponent = 1
+        xobj._filters = ("FlateDecode",)
+        xobj.streamContent = zlib.compress(img.tobytes(), 9)  # PIL "1": 1 = weiß, Zeilen auf Bytes gepolstert = PDF
+    else:
+        c.drawImage(ImageReader(img.convert("L")), ox * mm, oy * mm, iw * mm, ih * mm)
     c.showPage()
     c.save()
 
